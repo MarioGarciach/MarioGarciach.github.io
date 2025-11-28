@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Defensa Planetaria</title>
+    <style>
+        body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; }
+        canvas { display: block; margin: 0 auto; background: #000; }
+        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; }
+        .stat { font-size: 20px; font-weight: bold; margin-bottom: 5px; text-shadow: 1px 1px 2px black; }
+        #menu { position: absolute; bottom: 20px; width: 100%; text-align: center; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: gold; border: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="ui">
+        <div class="stat">Nivel: <span id="levelDisplay">1</span></div>
+        <div class="stat">Oro: <span id="goldDisplay">100</span></div>
+        <div class="stat">Vida Tierra: <span id="healthDisplay">100</span></div>
+    </div>
+
+    <div id="menu">
+    <div style="background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px;">
+        <span style="color: #aaa; margin-right: 10px;">CONSTRUIR:</span>
+        
+        <button onclick="seleccionarTorre(0)" id="btnTorre0" style="border: 2px solid white;">
+            Cañón Básico ($50)
+        </button>
+
+        <button onclick="seleccionarTorre(1)" id="btnTorre1" style="opacity: 0.5;">
+            Francotirador ($150)
+        </button>
+    </div>
+    <p style="color: #ccc; font-size: 14px; margin-top: 5px;">Selecciona un arma y haz clic en el espacio para construir.</p>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Ajustar canvas al tamaño de ventana
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const centroX = canvas.width / 2;
+    const centroY = canvas.height / 2;
+
+    // ESTADO DEL JUEGO
+    let oro = 100;
+    let nivel = 1;
+    let vidaTierra = 100;
+    let enemigos = [];
+    let torres = [];
+    let proyectiles = [];
+    let frame = 0;
+
+    // --- CLASES ---
+
+    class Tierra {
+        constructor() { this.radio = 40; }
+        draw() {
+            ctx.beginPath();
+            ctx.arc(centroX, centroY, this.radio, 0, Math.PI * 2);
+            ctx.fillStyle = 'blue';
+            ctx.fill();
+            ctx.strokeStyle = 'green';
+            ctx.lineWidth = 5;
+            ctx.stroke();
+        }
+    }
+
+    class Enemigo {
+        constructor(esJefe) {
+            // Aparecer en borde aleatorio
+            const angulo = Math.random() * Math.PI * 2;
+            const distancia = Math.max(canvas.width, canvas.height) / 1.5;
+            this.x = centroX + Math.cos(angulo) * distancia;
+            this.y = centroY + Math.sin(angulo) * distancia;
+            
+            this.velocidad = esJefe ? 0.5 : (1 + Math.random());
+            this.radio = esJefe ? 40 : 15;
+            this.vida = esJefe ? 500 : 20;
+            this.color = esJefe ? 'red' : 'purple';
+            this.maxVida = this.vida;
+            this.esJefe = esJefe;
+        }
+
+        update() {
+            // Moverse hacia el centro
+            const dx = centroX - this.x;
+            const dy = centroY - this.y;
+            const distancia = Math.hypot(dx, dy);
+            const vx = (dx / distancia) * this.velocidad;
+            const vy = (dy / distancia) * this.velocidad;
+
+            this.x += vx;
+            this.y += vy;
+
+            // Dañar Tierra
+            if (distancia < 50) { // Radio Tierra + margen
+                vidaTierra -= this.esJefe ? 50 : 10;
+                this.vida = 0; // Enemigo muere al impactar
+                actualizarUI();
+            }
+        }
+
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radio, 0, Math.PI * 2);
+            ctx.fillStyle = this.color;
+            ctx.fill();
+            
+            // Barra de vida simple
+            ctx.fillStyle = 'white';
+            ctx.fillRect(this.x - 10, this.y - 20, 20, 4);
+            ctx.fillStyle = 'green';
+            ctx.fillRect(this.x - 10, this.y - 20, 20 * (this.vida / this.maxVida), 4);
+        }
+    }
+
+    class Torre {
+        // Ahora recibimos 'config' que trae el daño, velocidad, etc.
+        constructor(x, y, config) {
+            this.x = x;
+            this.y = y;
+            // Usamos los valores de la configuración o valores por defecto
+            this.rango = config ? config.rango : 200;
+            this.velocidadDisparo = config ? config.velocidad : 30;
+            this.color = config ? config.color : 'gray';
+            this.daño = config ? config.daño : 10;
+            
+            this.cooldown = 0;
+        }
+
+        update() {
+            if (this.cooldown > 0) this.cooldown--;
+            else {
+                // Buscar enemigo más cercano
+                let objetivo = null;
+                let minDist = Infinity;
+                
+                enemigos.forEach(ene => {
+                    const dist = Math.hypot(ene.x - this.x, ene.y - this.y);
+                    if (dist < this.rango && dist < minDist) {
+                        minDist = dist;
+                        objetivo = ene;
+                    }
+                });
+
+                if (objetivo) {
+                    proyectiles.push(new Proyectil(this.x, this.y, objetivo));
+                    this.cooldown = this.velocidadDisparo;
+                }
+            }
+        }
+
+        draw() {
+            ctx.fillStyle = this.color; // Usar el color del tipo de torre
+            ctx.fillRect(this.x - 10, this.y - 10, 20, 20);
+            // Dibujar rango (opcional)
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.rango, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.stroke();
+        }
+    }
+
+    class Proyectil {
+        constructor(x, y, objetivo) {
+            this.x = x;
+            this.y = y;
+            this.velocidad = 5;
+            this.daño = 10;
+            
+            // Calcular dirección inicial hacia el objetivo
+            const dx = objetivo.x - x;
+            const dy = objetivo.y - y;
+            const dist = Math.hypot(dx, dy);
+            this.vx = (dx / dist) * this.velocidad;
+            this.vy = (dy / dist) * this.velocidad;
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+        }
+
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'yellow';
+            ctx.fill();
+        }
+    }
+
+    // --- FUNCIONES DEL JUEGO ---
+
+    function comprarTorre() {
+        if (oro >= 50) {
+            oro -= 50;
+            // Posición aleatoria cerca de la tierra para el ejemplo
+            // En el juego real, el usuario haría clic donde quiere ponerla
+            const angulo = Math.random() * Math.PI * 2;
+            const dist = 60 + Math.random() * 100;
+            torres.push(new Torre(centroX + Math.cos(angulo)*dist, centroY + Math.sin(angulo)*dist));
+            actualizarUI();
+        }
+    }
+
+    function actualizarUI() {
+        document.getElementById('goldDisplay').innerText = oro;
+        document.getElementById('levelDisplay').innerText = nivel;
+        document.getElementById('healthDisplay').innerText = vidaTierra;
+    }
+
+    // --- NUEVAS VARIABLES PARA CONSTRUCCIÓN ---
+    // Configuración de tus armas (aquí pondrás las 20)
+    const DATOS_TORRES = [
+        { nombre: "Cañón", costo: 50, color: 'gray', rango: 200, velocidad: 30, daño: 10 },
+        { nombre: "Francotirador", costo: 150, color: '#00ff00', rango: 600, velocidad: 100, daño: 50 }
+    ];
+
+    let indiceTorreSeleccionada = 0; // Por defecto seleccionamos la primera
+
+    // --- FUNCIONES DE INTERFAZ ---
+    
+    function seleccionarTorre(indice) {
+        indiceTorreSeleccionada = indice;
+        
+        // Efecto visual en los botones
+        document.querySelectorAll('#menu button').forEach((btn, i) => {
+            btn.style.border = (i === indice) ? '2px solid white' : 'none';
+            btn.style.opacity = (i === indice) ? '1' : '0.5';
+        });
+    }
+
+    // --- DETECCIÓN DEL CLIC (LA MAGIA) ---
+    
+    canvas.addEventListener('click', function(event) {
+        // 1. Obtener coordenadas exactas del mouse dentro del canvas
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+
+        // 2. Verificar datos de la torre seleccionada
+        const datosTorre = DATOS_TORRES[indiceTorreSeleccionada];
+
+        // 3. Validaciones antes de construir
+        
+        // A) ¿Tengo dinero?
+        if (oro < datosTorre.costo) {
+            alert("¡No tienes suficiente oro!"); // O poner un sonido de error
+            return;
+        }
+
+        // B) ¿Estoy intentando construir encima de la Tierra?
+        const distanciaAlCentro = Math.hypot(mouseX - centroX, mouseY - centroY);
+        if (distanciaAlCentro < 60) { // 40 radio tierra + 20 margen
+            console.log("No puedes construir en la base");
+            return;
+        }
+
+        // C) ¿Estoy construyendo encima de otra torre? (Opcional pero recomendado)
+        let colisionTorre = false;
+        torres.forEach(t => {
+            const dist = Math.hypot(mouseX - t.x, mouseY - t.y);
+            if (dist < 25) colisionTorre = true; // Si está muy cerca de otra
+        });
+        if (colisionTorre) return;
+
+        // 4. CONSTRUIR
+        oro -= datosTorre.costo;
+        
+        // Creamos la torre pasándole los datos del tipo seleccionado
+        // Nota: Necesitamos actualizar un poco la clase Torre para recibir estos datos
+        torres.push(new Torre(mouseX, mouseY, datosTorre));
+        
+        actualizarUI();
+    });
+
+    function gameLoop() {
+        if (vidaTierra <= 0) {
+            alert("¡La Tierra ha sido destruida! Nivel alcanzado: " + nivel);
+            location.reload();
+            return;
+        }
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Limpiar pantalla
+
+        // 1. Dibujar Tierra
+        new Tierra().draw();
+
+        // 2. Generar Enemigos
+        frame++;
+        let frecuenciaSpawn = Math.max(20, 100 - (nivel * 5)); // Más rápido cada nivel
+        
+        // Jefe cada 10 niveles
+        if (frame % 2000 === 0 && nivel % 10 === 0) { // Simplificado para demo
+             enemigos.push(new Enemigo(true));
+        } else if (frame % frecuenciaSpawn === 0) {
+             enemigos.push(new Enemigo(false));
+        }
+
+        // Subir nivel cada cierto tiempo (simple)
+        if (frame % 1000 === 0) {
+            nivel++;
+            actualizarUI();
+        }
+
+        // 3. Actualizar y Dibujar Torres
+        torres.forEach(t => { t.update(); t.draw(); });
+
+        // 4. Actualizar y Dibujar Enemigos
+        enemigos.forEach((ene, index) => {
+            ene.update();
+            ene.draw();
+            if (ene.vida <= 0) {
+                oro += ene.esJefe ? 100 : 10;
+                enemigos.splice(index, 1);
+                actualizarUI();
+            }
+        });
+
+        // 5. Actualizar Proyectiles y Colisiones
+        proyectiles.forEach((p, pIndex) => {
+            p.update();
+            p.draw();
+            
+            // Eliminar si sale de pantalla
+            if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                proyectiles.splice(pIndex, 1);
+                return;
+            }
+
+            // Colisión con enemigos
+            enemigos.forEach(e => {
+                const dist = Math.hypot(p.x - e.x, p.y - e.y);
+                if (dist < e.radio) {
+                    e.vida -= p.daño;
+                    proyectiles.splice(pIndex, 1); // Eliminar bala
+                }
+            });
+        });
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Iniciar
+    gameLoop();
+
+</script>
+</body>
+</html>
