@@ -1,354 +1,877 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Defensa Planetaria</title>
-    <style>
-        body { margin: 0; background: #111; color: white; font-family: sans-serif; overflow: hidden; }
-        canvas { display: block; margin: 0 auto; background: #000; }
-        #ui { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; }
-        .stat { font-size: 20px; font-weight: bold; margin-bottom: 5px; text-shadow: 1px 1px 2px black; }
-        #menu { position: absolute; bottom: 20px; width: 100%; text-align: center; }
-        button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: gold; border: none; font-weight: bold; }
-    </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Defensa Planetaria — Versión Mejorada</title>
+<style>
+  :root{
+    --bg:#0b0b12;
+    --panel:#0f1720;
+    --accent:#f6c13b;
+    --muted:#95a0b4;
+    --danger:#e05353;
+  }
+  html,body{height:100%;margin:0;font-family:Inter,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:#e6eef6}
+  #game-wrap{display:flex; height:100vh;}
+  #left{flex:1; position:relative; overflow:hidden;}
+  canvas{display:block;background:linear-gradient(180deg,#000011 0%, #00031a 100%); width:100%; height:100%; }
+  #ui{position:absolute;left:16px;top:16px;z-index:30;pointer-events:none}
+  .stat{background:rgba(0,0,0,0.45); padding:8px 12px;border-radius:10px;margin-bottom:8px;pointer-events:auto;box-shadow:0 6px 18px rgba(0,0,0,0.6)}
+  .stat strong{display:inline-block;width:110px}
+  #controls{position:absolute;right:16px;top:16px;z-index:30;pointer-events:auto}
+  .panel{background:var(--panel);border-radius:12px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,0.6);margin-bottom:12px;min-width:260px}
+  .shop-btn{display:flex;align-items:center;gap:10px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);cursor:pointer;background:linear-gradient(180deg, rgba(255,255,255,0.02), transparent);margin-bottom:8px}
+  .shop-btn.disabled{opacity:0.45;cursor:not-allowed}
+  .shop-btn img{width:44px;height:32px;object-fit:contain;border-radius:6px;background:#051322;padding:4px}
+  .row{display:flex;gap:8px;align-items:center}
+  button{background:var(--accent);border:none;color:#000;padding:8px 10px;border-radius:8px;font-weight:700;cursor:pointer}
+  small{color:var(--muted)}
+  #footerNote{font-size:12px;color:var(--muted);margin-top:8px}
+  .badge{background:#ffffff11;padding:6px;border-radius:6px;color:var(--accent);font-weight:700}
+  .mission{background:#07111b;padding:8px;border-radius:8px;margin-bottom:8px;font-size:13px}
+  .achievement{background:#07111b;padding:8px;border-radius:8px;margin-bottom:8px;font-size:13px;color:#9df}
+  #preview{position:absolute;pointer-events:none;z-index:20}
+</style>
 </head>
 <body>
-
-    <div id="ui">
-        <div class="stat">Nivel: <span id="levelDisplay">1</span></div>
-        <div class="stat">Oro: <span id="goldDisplay">100</span></div>
-        <div class="stat">Vida Tierra: <span id="healthDisplay">100</span></div>
-    </div>
-
-    <div id="menu">
-    <div style="background: rgba(0,0,0,0.7); padding: 10px; border-radius: 10px;">
-        <span style="color: #aaa; margin-right: 10px;">CONSTRUIR:</span>
-        
-        <button onclick="seleccionarTorre(0)" id="btnTorre0" style="border: 2px solid white;">
-            Cañón Básico ($50)
-        </button>
-
-        <button onclick="seleccionarTorre(1)" id="btnTorre1" style="opacity: 0.5;">
-            Francotirador ($150)
-        </button>
-    </div>
-    <p style="color: #ccc; font-size: 14px; margin-top: 5px;">Selecciona un arma y haz clic en el espacio para construir.</p>
-    </div>
-
+<div id="game-wrap">
+  <div id="left">
     <canvas id="gameCanvas"></canvas>
 
+    <div id="ui">
+      <div class="stat">Nivel: <span id="levelDisplay">1</span></div>
+      <div class="stat">Oro: <span id="goldDisplay">100</span> <small id="goldBonus"></small></div>
+      <div class="stat">Vida Tierra: <span id="healthDisplay">100</span></div>
+      <div class="stat">XP: <span id="xpDisplay">0</span> / <span id="xpToNext">100</span></div>
+    </div>
+
+    <div id="preview"></div>
+  </div>
+
+  <div id="controls" style="pointer-events:auto;">
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div><strong>Defensa Planetaria</strong><br><small>Mejorada — Alpha</small></div>
+        <div class="badge" id="waveBadge">Wave 1</div>
+      </div>
+
+      <div id="shop">
+        <!-- Botones se crean desde JS -->
+      </div>
+
+      <div style="display:flex;gap:6px;margin-top:8px">
+        <button id="startBtn">Pausar</button>
+        <button id="sellModeBtn">Vender</button>
+        <button id="saveBtn">Guardar</button>
+      </div>
+
+      <div id="footerNote">Consejo: selecciona una torre y haz clic para construir. Mantén presionado shift para bloquear torre.</div>
+    </div>
+
+    <div class="panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong>Mejoras Permanentes</strong>
+        <small class="muted">progreso</small>
+      </div>
+      <div id="permanentUpgrades">
+        <!-- Creado desde JS -->
+      </div>
+    </div>
+
+    <div class="panel">
+      <strong>Misión activas</strong>
+      <div id="missions" style="margin-top:8px"></div>
+      <strong style="margin-top:8px;display:block">Logros</strong>
+      <div id="achievements" style="margin-top:8px"></div>
+    </div>
+
+  </div>
+</div>
+
 <script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
+/*
+ Definición y estructura del juego:
+ - Canvas central con Tierra en el medio.
+ - Torretas colocables con preview.
+ - Tipos de torres y enemigos con resistencias.
+ - Oleadas y jefe.
+ - Partículas y sonidos generados con WebAudio.
+ - Misiones y logros simples.
+ - Guardado automático en localStorage.
+*/
 
-    // Ajustar canvas al tamaño de ventana
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    const centroX = canvas.width / 2;
-    const centroY = canvas.height / 2;
+// ------------------------- Utilidades -------------------------
+const rand = (a,b)=> Math.random()*(b-a)+a;
+const clamp = (v,a,b)=> Math.max(a,Math.min(b,v));
+const dist = (x1,y1,x2,y2)=> Math.hypot(x2-x1,y2-y1);
 
-    // ESTADO DEL JUEGO
-    let oro = 100;
-    let nivel = 1;
-    let vidaTierra = 100;
-    let enemigos = [];
-    let torres = [];
-    let proyectiles = [];
-    let frame = 0;
+// ------------------------- Variables canvas -------------------------
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+let DPR = window.devicePixelRatio || 1;
 
-    // --- CLASES ---
+function resizeCanvas(){
+  canvas.width = Math.floor(canvas.clientWidth * DPR);
+  canvas.height = Math.floor(canvas.clientHeight * DPR);
+}
+function fitFull(){
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+  DPR = window.devicePixelRatio || 1;
+  resizeCanvas();
+}
+window.addEventListener('resize', ()=>{fitFull();});
+fitFull();
 
-    class Tierra {
-        constructor() { this.radio = 40; }
-        draw() {
-            ctx.beginPath();
-            ctx.arc(centroX, centroY, this.radio, 0, Math.PI * 2);
-            ctx.fillStyle = 'blue';
-            ctx.fill();
-            ctx.strokeStyle = 'green';
-            ctx.lineWidth = 5;
-            ctx.stroke();
-        }
+// Centro planeta
+function centro(){ return { x: canvas.width/2, y: canvas.height/2 }; }
+
+// ------------------------- Sonidos (simple synth) -------------------------
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function beep(freq=440, duration=0.06, type='sine', gain=0.06){
+  try{
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    o.connect(g);
+    g.connect(audioCtx.destination);
+    g.gain.value = gain;
+    o.start();
+    o.stop(audioCtx.currentTime + duration);
+  }catch(e){}
+}
+
+// Partículas
+class Particle {
+  constructor(x,y,vx,vy,ttl,color, size=2){
+    this.x=x; this.y=y; this.vx=vx; this.vy=vy; this.ttl=ttl; this.age=0; this.color=color; this.size=size;
+  }
+  update(dt){
+    this.x += this.vx*dt;
+    this.y += this.vy*dt;
+    this.vx *= 0.99; this.vy *= 0.99;
+    this.age += dt;
+  }
+  draw(ctx){
+    const alpha = clamp(1 - this.age/this.ttl,0,1);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = this.color;
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.size* (1-alpha*0.8),0,Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ------------------------- Entidades -------------------------
+class Tierra {
+  constructor(){
+    this.radius = 50 * DPR;
+    this.maxHealth = 100;
+    this.health = 100;
+  }
+  draw(ctx){
+    const c = centro();
+    // glow
+    const grad = ctx.createRadialGradient(c.x,c.y,this.radius*0.1,c.x,c.y,this.radius*3);
+    grad.addColorStop(0,'rgba(20,120,255,0.15)');
+    grad.addColorStop(0.6,'rgba(10,10,40,0.05)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(c.x,c.y,this.radius*2.5,0,Math.PI*2);
+    ctx.fill();
+
+    // cuerpo del planeta
+    ctx.beginPath();
+    ctx.arc(c.x,c.y,this.radius,0,Math.PI*2);
+    ctx.fillStyle = '#1b60ff';
+    ctx.fill();
+    ctx.lineWidth = 6*DPR;
+    ctx.strokeStyle = '#1fbf4a';
+    ctx.stroke();
+
+    // barra circular salud
+    const pct = clamp(this.health / this.maxHealth,0,1);
+    ctx.beginPath();
+    ctx.lineWidth = 8*DPR;
+    ctx.strokeStyle = '#ffffff15';
+    ctx.arc(c.x,c.y,this.radius + 18*DPR,0,Math.PI*2);
+    ctx.stroke();
+
+    const start = -Math.PI/2;
+    ctx.beginPath();
+    ctx.strokeStyle = pct>0.5 ? '#59ff7a' : (pct>0.25? '#ffd54d' : '#ff7360');
+    ctx.lineWidth = 8*DPR;
+    ctx.arc(c.x,c.y,this.radius + 18*DPR,start,start + Math.PI*2*pct);
+    ctx.stroke();
+  }
+}
+
+class Enemy {
+  constructor(type='basic'){
+    const c = centro();
+    const ang = Math.random()*Math.PI*2;
+    const maxd = Math.max(canvas.width, canvas.height);
+    this.x = c.x + Math.cos(ang)* (maxd*0.6 + rand(0,200)*DPR);
+    this.y = c.y + Math.sin(ang)* (maxd*0.6 + rand(0,200)*DPR);
+    this.type = type;
+    this.setFromType();
+    this.dead = false;
+    this.hitFlash = 0;
+  }
+
+  setFromType(){
+    // define stats por tipo
+    const base = {
+      'basic': {speed:0.9, radius:12 * DPR, hp:30, color:'#A259FF', gold:8, armor:0},
+      'fast':  {speed:2.0, radius:9 * DPR, hp:18, color:'#58d5ff', gold:6, armor:0},
+      'armored':{speed:0.6, radius:16 * DPR, hp:80, color:'#d4d4d4', gold:18, armor:0.35},
+      'ghost': {speed:1.2, radius:10 * DPR, hp:40, color:'#d19bff', gold:10, armor:0, stealth:true},
+      'spliter':{speed:1.1, radius:11 * DPR, hp:32, color:'#ffcc66', gold:7, armor:0, onDeath:'split'},
+      'boss':  {speed:0.5, radius:30 * DPR, hp:600, color:'#ff5252', gold:300, armor:0.2, boss:true},
+    };
+
+    const t = base[this.type] || base.basic;
+    this.speed = t.speed; this.radius = t.radius; this.hp = t.hp; this.maxHp = t.hp; this.color = t.color;
+    this.gold = t.gold; this.armor = t.armor || 0; this.stealth = t.stealth || false;
+    this.onDeath = t.onDeath || null; this.boss = t.boss || false;
+  }
+
+  update(dt){
+    const c = centro();
+    const dx = c.x - this.x, dy = c.y - this.y;
+    const d = Math.hypot(dx,dy);
+    const nx = dx/d, ny = dy/d;
+    this.x += nx * this.speed * dt * DPR * 0.8;
+    this.y += ny * this.speed * dt * DPR * 0.8;
+
+    // dañar planeta si choca
+    if (d < (this.radius + 50*DPR)){
+      // impacto
+      game.tierra.health -= this.boss ? 40 : 8;
+      this.hp = 0;
+      this.dead = true;
+      game.addParticles(this.x,this.y,20,'#ffb3b3');
+      beep(120,0.05,'sine',0.12);
     }
 
-    class Enemigo {
-        constructor(esJefe) {
-            // Aparecer en borde aleatorio
-            const angulo = Math.random() * Math.PI * 2;
-            const distancia = Math.max(canvas.width, canvas.height) / 1.5;
-            this.x = centroX + Math.cos(angulo) * distancia;
-            this.y = centroY + Math.sin(angulo) * distancia;
-            
-            this.velocidad = esJefe ? 0.5 : (1 + Math.random());
-            this.radio = esJefe ? 40 : 15;
-            this.vida = esJefe ? 500 : 20;
-            this.color = esJefe ? 'red' : 'purple';
-            this.maxVida = this.vida;
-            this.esJefe = esJefe;
+    if (this.hitFlash > 0) this.hitFlash -= dt;
+  }
+
+  draw(ctx){
+    ctx.save();
+    ctx.beginPath();
+    ctx.fillStyle = this.color;
+    ctx.globalAlpha = this.stealth ? 0.5 : 1;
+    ctx.arc(this.x,this.y,this.radius,0,Math.PI*2);
+    ctx.fill();
+    ctx.strokeStyle = this.hitFlash>0 ? '#fff' : '#00000030';
+    ctx.lineWidth = 2*DPR;
+    ctx.stroke();
+
+    // vida
+    const w = this.radius*1.6;
+    ctx.fillStyle = '#ffffff33';
+    ctx.fillRect(this.x - w/2, this.y - this.radius - 12*DPR, w, 6*DPR);
+    ctx.fillStyle = '#59ff7a';
+    ctx.fillRect(this.x - w/2, this.y - this.radius - 12*DPR, w * (this.hp/this.maxHp), 6*DPR);
+
+    ctx.restore();
+  }
+}
+
+class Tower {
+  constructor(x,y,config){
+    this.x = x; this.y = y;
+    this.type = config.key;
+    this.level = 1;
+    this.range = config.range * DPR;
+    this.fireRate = config.fireRate; // frames between shots (lower = faster)
+    this.cooldown = 0;
+    this.damage = config.damage;
+    this.color = config.color;
+    this.size = 18 * DPR;
+    this.upgradeCost = config.upgradeCost;
+    this.sellValue = Math.floor(config.cost*0.6);
+    this.target = null;
+    this.rotation = 0;
+    this.aoe = config.aoe || 0;
+    this.special = config.special || null;
+  }
+
+  update(dt){
+    if (this.cooldown > 0) this.cooldown -= dt * 60; // normalizar
+    // buscar objetivo
+    let best = null, bestDist = Infinity;
+    for (const e of game.enemies){
+      if (e.dead) continue;
+      if (e.stealth && this.type !== 'radar') continue; // radar detecta
+      const d = dist(this.x,this.y,e.x,e.y);
+      if (d <= this.range && d < bestDist){
+        best = e; bestDist = d;
+      }
+    }
+    if (best){
+      // rotación visual
+      this.rotation = Math.atan2(best.y - this.y, best.x - this.x);
+      if (this.cooldown <= 0){
+        // disparar
+        this.shoot(best);
+        this.cooldown = this.fireRate;
+      }
+    }
+  }
+
+  shoot(target){
+    // crear proyectil o efecto instantáneo
+    // decidir por tipo
+    if (this.type === 'cannon'){
+      game.projectiles.push(new Projectile(this.x,this.y,target, {damage:this.damage,color:'#ffec99',speed:8*DPR}));
+      beep(900,0.03,'sine',0.04);
+    } else if (this.type === 'sniper'){
+      game.projectiles.push(new Projectile(this.x,this.y,target, {damage:this.damage*2,color:'#b3ffec',speed:18*DPR,pierce:true}));
+      beep(1400,0.04,'sawtooth',0.06);
+    } else if (this.type === 'plasma'){
+      game.projectiles.push(new Projectile(this.x,this.y,target, {damage:this.damage,color:'#ff6bff',speed:6*DPR,aoe:18*DPR}));
+      beep(700,0.02,'triangle',0.05);
+    } else if (this.type === 'tesla'){
+      // cadena entre enemigos cercanos
+      this.chain(target);
+      beep(1500,0.02,'square',0.05);
+    } else if (this.type === 'radar'){
+      // radar aumenta temporalmente daño al target (buff)
+      target.hp -= this.damage; // radar acts as detector & small damage
+      game.addParticles(target.x,target.y,6,'#aaf');
+    } else if (this.type === 'gravity'){
+      // ralentiza area
+      target.speed *= 0.85;
+      game.addParticles(target.x,target.y,8,'#b0d8ff');
+    }
+  }
+
+  chain(initial){
+    // crea daño en serie a varios enemigos cercanos
+    const visited = new Set();
+    let current = initial;
+    let depth = 0;
+    while(current && depth < 4){
+      current.hp -= this.damage * (1 - depth*0.15);
+      game.addParticles(current.x,current.y,6,'#f9ff9a');
+      visited.add(current);
+      // buscar vecino
+      let next = null, minD = Infinity;
+      for (const e of game.enemies){
+        if (visited.has(e) || e.dead) continue;
+        const d = dist(current.x,current.y,e.x,e.y);
+        if (d < 120*DPR && d < minD){
+          minD = d; next = e;
         }
+      }
+      current = next; depth++;
+    }
+  }
 
-        update() {
-            // Moverse hacia el centro
-            const dx = centroX - this.x;
-            const dy = centroY - this.y;
-            const distancia = Math.hypot(dx, dy);
-            const vx = (dx / distancia) * this.velocidad;
-            const vy = (dy / distancia) * this.velocidad;
+  draw(ctx){
+    ctx.save();
+    // base
+    ctx.translate(this.x,this.y);
+    ctx.rotate(this.rotation || 0);
+    ctx.fillStyle = this.color;
+    ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size);
+    // cañón
+    ctx.fillStyle = '#ffffff22';
+    ctx.fillRect(0, -4*DPR, this.size*0.9, 8*DPR);
+    ctx.restore();
 
-            this.x += vx;
-            this.y += vy;
+    // rango (sutil)
+    ctx.beginPath();
+    ctx.arc(this.x,this.y,this.range,0,Math.PI*2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1*DPR;
+    ctx.stroke();
+  }
+}
 
-            // Dañar Tierra
-            if (distancia < 50) { // Radio Tierra + margen
-                vidaTierra -= this.esJefe ? 50 : 10;
-                this.vida = 0; // Enemigo muere al impactar
-                actualizarUI();
+class Projectile {
+  constructor(x,y,target,opts={}){
+    this.x=x;this.y=y;this.target=target;this.damage=opts.damage||10;this.color=opts.color||'#fff';
+    this.speed = opts.speed||8*DPR; this.aoe = opts.aoe || 0; this.pierce = !!opts.pierce; this.dead=false;
+    const dx = target.x - x, dy = target.y - y, d = Math.hypot(dx,dy);
+    this.vx = dx/d * this.speed; this.vy = dy/d * this.speed;
+  }
+  update(dt){
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    // colisión
+    for (const e of game.enemies){
+      if (e.dead) continue;
+      if (dist(this.x,this.y,e.x,e.y) < e.radius + 4*DPR){
+        // impacto
+        const dmg = Math.max(1, Math.round(this.damage * (1 - e.armor)));
+        e.hp -= dmg;
+        e.hitFlash = 0.08;
+        game.addParticles(e.x,e.y,6,this.color, 1 + Math.random()*2);
+        if (!this.pierce) this.dead = true;
+        if (this.aoe){
+          // daño de area
+          for (const e2 of game.enemies){
+            if (e2 === e || e2.dead) continue;
+            if (dist(this.x,this.y,e2.x,e2.y) < this.aoe){
+              e2.hp -= Math.round(this.damage * 0.6 * (1 - e2.armor));
+              game.addParticles(e2.x,e2.y,4,'#ffaaff',1);
             }
+          }
         }
-
-        draw() {
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radio, 0, Math.PI * 2);
-            ctx.fillStyle = this.color;
-            ctx.fill();
-            
-            // Barra de vida simple
-            ctx.fillStyle = 'white';
-            ctx.fillRect(this.x - 10, this.y - 20, 20, 4);
-            ctx.fillStyle = 'green';
-            ctx.fillRect(this.x - 10, this.y - 20, 20 * (this.vida / this.maxVida), 4);
-        }
+        beep(1000,0.01,'sine',0.02);
+        break;
+      }
     }
 
-    class Torre {
-        // Ahora recibimos 'config' que trae el daño, velocidad, etc.
-        constructor(x, y, config) {
-            this.x = x;
-            this.y = y;
-            // Usamos los valores de la configuración o valores por defecto
-            this.rango = config ? config.rango : 200;
-            this.velocidadDisparo = config ? config.velocidad : 30;
-            this.color = config ? config.color : 'gray';
-            this.daño = config ? config.daño : 10;
-            
-            this.cooldown = 0;
-        }
+    // out of bounds
+    if (this.x < -100 || this.x > canvas.width+100 || this.y < -100 || this.y > canvas.height+100) this.dead = true;
+  }
+  draw(ctx){
+    ctx.beginPath();
+    ctx.fillStyle = this.color;
+    ctx.arc(this.x,this.y,4*DPR,0,Math.PI*2);
+    ctx.fill();
+  }
+}
 
-        update() {
-            if (this.cooldown > 0) this.cooldown--;
-            else {
-                // Buscar enemigo más cercano
-                let objetivo = null;
-                let minDist = Infinity;
-                
-                enemigos.forEach(ene => {
-                    const dist = Math.hypot(ene.x - this.x, ene.y - this.y);
-                    if (dist < this.rango && dist < minDist) {
-                        minDist = dist;
-                        objetivo = ene;
-                    }
-                });
+// ------------------------- Game Manager -------------------------
+const game = {
+  tierra: new Tierra(),
+  enemies: [],
+  towers: [],
+  projectiles: [],
+  particles: [],
+  frame: 0,
+  wave: 1,
+  waveTimer: 0,
+  spawnInterval: 60,
+  gold: 120,
+  xp: 0,
+  xpToNext: 100,
+  paused: false,
+  sellMode: false,
+  settings: {
+    goldBonus: 0 // mejora permanente
+  },
 
-                if (objetivo) {
-                    proyectiles.push(new Proyectil(this.x, this.y, objetivo));
-                    this.cooldown = this.velocidadDisparo;
-                }
-            }
-        }
+  addParticles(x,y,n,color,size=1.5){
+    for (let i=0;i<n;i++){
+      const ang = Math.random()*Math.PI*2;
+      const sp = rand(0.5,2.6) * DPR;
+      this.particles.push(new Particle(x,y,Math.cos(ang)*sp,Math.sin(ang)*sp, rand(0.4,0.9), color, (Math.random()*2+size)));
+    }
+  },
 
-        draw() {
-            ctx.fillStyle = this.color; // Usar el color del tipo de torre
-            ctx.fillRect(this.x - 10, this.y - 10, 20, 20);
-            // Dibujar rango (opcional)
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, this.rango, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-            ctx.stroke();
-        }
+  spawnEnemy(type){
+    const e = new Enemy(type);
+    this.enemies.push(e);
+  },
+
+  startWave(){
+    this.waveTimer = 0;
+    this.spawnInterval = Math.max(10, 60 - (this.wave * 2));
+  },
+
+  nextWave(){
+    this.wave++;
+    document.getElementById('waveBadge').innerText = 'Wave ' + this.wave;
+    this.startWave();
+  },
+
+  update(dt){
+    if (this.paused) return;
+    this.frame++;
+    // spawn logic
+    this.waveTimer += dt * 60;
+    if (this.waveTimer > this.spawnInterval){
+      // spawn pattern según wave
+      const mix = Math.min(6, 1 + Math.floor(this.wave / 3));
+      // random enemy selection but with wave scaling
+      const r = Math.random();
+      if (this.wave % 10 === 0 && Math.random() > 0.6){
+        this.spawnEnemy('boss');
+      } else if (r < 0.25) this.spawnEnemy('basic');
+      else if (r < 0.5) this.spawnEnemy('fast');
+      else if (r < 0.7) this.spawnEnemy('armored');
+      else if (r < 0.85) this.spawnEnemy('spliter');
+      else this.spawnEnemy('ghost');
+      this.waveTimer = 0;
+      beep(350,0.02,'sine',0.04);
     }
 
-    class Proyectil {
-        constructor(x, y, objetivo) {
-            this.x = x;
-            this.y = y;
-            this.velocidad = 5;
-            this.daño = 10;
-            
-            // Calcular dirección inicial hacia el objetivo
-            const dx = objetivo.x - x;
-            const dy = objetivo.y - y;
-            const dist = Math.hypot(dx, dy);
-            this.vx = (dx / dist) * this.velocidad;
-            this.vy = (dy / dist) * this.velocidad;
-        }
+    // update towers
+    for (const t of this.towers) t.update(dt);
 
-        update() {
-            this.x += this.vx;
-            this.y += this.vy;
+    // enemies
+    for (let i = this.enemies.length-1; i>=0; i--){
+      const e = this.enemies[i];
+      e.update(dt);
+      if (e.hp <= 0 && !e.dead){
+        e.dead = true;
+        // death behaviour
+        this.addParticles(e.x,e.y,18,'#ffcc88');
+        if (e.onDeath === 'split'){
+          // crea 2 pequeños rápidos
+          for (let k=0;k<2;k++){
+            const small = new Enemy('fast');
+            small.x = e.x + rand(-10,10); small.y = e.y + rand(-10,10);
+            this.enemies.push(small);
+          }
         }
-
-        draw() {
-            ctx.beginPath();
-            ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
-            ctx.fillStyle = 'yellow';
-            ctx.fill();
-        }
+        // reward
+        const goldGain = Math.round(e.gold * (1 + this.settings.goldBonus));
+        this.gold += goldGain;
+        this.xp += Math.min(20, Math.round(e.maxHp / 20));
+        checkMissions('kill', e);
+        checkAchievements('enemyKilled', e);
+        beep(220,0.02,'sine',0.04);
+      }
+      if (e.dead){
+        // remove
+        this.enemies.splice(i,1);
+      }
     }
 
-    // --- FUNCIONES DEL JUEGO ---
-
-    function comprarTorre() {
-        if (oro >= 50) {
-            oro -= 50;
-            // Posición aleatoria cerca de la tierra para el ejemplo
-            // En el juego real, el usuario haría clic donde quiere ponerla
-            const angulo = Math.random() * Math.PI * 2;
-            const dist = 60 + Math.random() * 100;
-            torres.push(new Torre(centroX + Math.cos(angulo)*dist, centroY + Math.sin(angulo)*dist));
-            actualizarUI();
-        }
+    // projectiles
+    for (let i=this.projectiles.length-1;i>=0;i--){
+      const p = this.projectiles[i];
+      p.update(dt);
+      if (p.dead) this.projectiles.splice(i,1);
     }
 
-    function actualizarUI() {
-        document.getElementById('goldDisplay').innerText = oro;
-        document.getElementById('levelDisplay').innerText = nivel;
-        document.getElementById('healthDisplay').innerText = vidaTierra;
+    // particles
+    for (let i=this.particles.length-1;i>=0;i--){
+      const p = this.particles[i];
+      p.update(dt);
+      if (p.age >= p.ttl) this.particles.splice(i,1);
     }
 
-    // --- NUEVAS VARIABLES PARA CONSTRUCCIÓN ---
-    // Configuración de tus armas (aquí pondrás las 20)
-    const DATOS_TORRES = [
-        { nombre: "Cañón", costo: 50, color: 'gray', rango: 200, velocidad: 30, daño: 10 },
-        { nombre: "Francotirador", costo: 150, color: '#00ff00', rango: 600, velocidad: 100, daño: 50 }
-    ];
-
-    let indiceTorreSeleccionada = 0; // Por defecto seleccionamos la primera
-
-    // --- FUNCIONES DE INTERFAZ ---
-    
-    function seleccionarTorre(indice) {
-        indiceTorreSeleccionada = indice;
-        
-        // Efecto visual en los botones
-        document.querySelectorAll('#menu button').forEach((btn, i) => {
-            btn.style.border = (i === indice) ? '2px solid white' : 'none';
-            btn.style.opacity = (i === indice) ? '1' : '0.5';
-        });
+    // level xp
+    if (this.xp >= this.xpToNext){
+      this.xp -= this.xpToNext;
+      this.xpToNext = Math.round(this.xpToNext * 1.25);
+      // recompensa
+      this.gold += 30 + this.wave * 2;
+      beep(1200,0.08,'sine',0.08);
     }
 
-    // --- DETECCIÓN DEL CLIC (LA MAGIA) ---
-    
-    canvas.addEventListener('click', function(event) {
-        // 1. Obtener coordenadas exactas del mouse dentro del canvas
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = event.clientX - rect.left;
-        const mouseY = event.clientY - rect.top;
+    // check planet health
+    if (this.tierra.health <= 0){
+      alert('La Tierra ha sido destruida. Wave alcanzada: ' + this.wave);
+      location.reload();
+    }
+  },
 
-        // 2. Verificar datos de la torre seleccionada
-        const datosTorre = DATOS_TORRES[indiceTorreSeleccionada];
+  draw(ctx){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    // fondo estrellado simple
+    for (let i=0;i<40;i++){
+      const x = (i*1234) % canvas.width + (Math.sin(Date.now()/1000 + i)*6);
+      const y = (i*2345) % canvas.height;
+      ctx.fillStyle = 'rgba(255,255,255,0.02)';
+      ctx.fillRect(x,y,1*DPR,1*DPR);
+    }
 
-        // 3. Validaciones antes de construir
-        
-        // A) ¿Tengo dinero?
-        if (oro < datosTorre.costo) {
-            alert("¡No tienes suficiente oro!"); // O poner un sonido de error
-            return;
-        }
+    this.tierra.draw(ctx);
 
-        // B) ¿Estoy intentando construir encima de la Tierra?
-        const distanciaAlCentro = Math.hypot(mouseX - centroX, mouseY - centroY);
-        if (distanciaAlCentro < 60) { // 40 radio tierra + 20 margen
-            console.log("No puedes construir en la base");
-            return;
-        }
+    // draw towers
+    for (const t of this.towers) t.draw(ctx);
+    // enemies
+    for (const e of this.enemies) e.draw(ctx);
+    // projectiles
+    for (const p of this.projectiles) p.draw(ctx);
+    // particles
+    for (const p of this.particles) p.draw(ctx);
+  },
 
-        // C) ¿Estoy construyendo encima de otra torre? (Opcional pero recomendado)
-        let colisionTorre = false;
-        torres.forEach(t => {
-            const dist = Math.hypot(mouseX - t.x, mouseY - t.y);
-            if (dist < 25) colisionTorre = true; // Si está muy cerca de otra
-        });
-        if (colisionTorre) return;
+  save(){
+    const data = {
+      gold: this.gold,
+      wave: this.wave,
+      settings: this.settings,
+      upgrades: persistent.upgrades,
+    };
+    localStorage.setItem('defensa_v1_save', JSON.stringify(data));
+    beep(1000,0.05,'sine',0.08);
+  },
 
-        // 4. CONSTRUIR
-        oro -= datosTorre.costo;
-        
-        // Creamos la torre pasándole los datos del tipo seleccionado
-        // Nota: Necesitamos actualizar un poco la clase Torre para recibir estos datos
-        torres.push(new Torre(mouseX, mouseY, datosTorre));
-        
-        actualizarUI();
+  load(){
+    const raw = localStorage.getItem('defensa_v1_save');
+    if (!raw) return;
+    try{
+      const data = JSON.parse(raw);
+      this.gold = data.gold || this.gold;
+      this.wave = data.wave || this.wave;
+      this.settings = data.settings || this.settings;
+      persistent.upgrades = data.upgrades || persistent.upgrades;
+    }catch(e){}
+  }
+};
+
+// ------------------------- Shop / Tower config -------------------------
+const TOWER_TYPES = [
+  { key:'cannon', name:'Cañón Básico', cost:50, damage:14, range:200, fireRate:20, color:'#9aa2ff', upgradeCost:60 },
+  { key:'sniper', name:'Francotirador', cost:150, damage:60, range:520, fireRate:90, color:'#9bffdd', upgradeCost:120 },
+  { key:'plasma', name:'Plasma AOE', cost:120, damage:20, range:160, fireRate:30, color:'#ff8cff', aoe:50, upgradeCost:100 },
+  { key:'tesla', name:'Tesla Cadena', cost:200, damage:22, range:180, fireRate:12, color:'#b3f2ff', upgradeCost:160 },
+  { key:'gravity', name:'Gravitón', cost:140, damage:6, range:170, fireRate:40, color:'#cfe6ff', special:'slow', upgradeCost:110 },
+  { key:'radar', name:'Radar (detector)', cost:90, damage:8, range:260, fireRate:50, color:'#fff2b3', upgradeCost:80 },
+];
+
+// UI shop creation
+const shopEl = document.getElementById('shop');
+let selectedTowerKey = null;
+function createShop(){
+  TOWER_TYPES.forEach(t => {
+    const btn = document.createElement('div');
+    btn.className = 'shop-btn';
+    btn.innerHTML = `
+      <img src="data:image/svg+xml;utf8,${encodeURIComponent(svgForTower(t.key))}" alt="">
+      <div style="flex:1">
+        <div style="font-weight:700">${t.name}</div>
+        <div style="font-size:13px;color:var(--muted)">${t.cost} oro • Rango ${t.range}px</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-weight:800">${t.cost}€</div>
+        <small style="color:var(--muted)">${t.upgradeCost}↑</small>
+      </div>
+    `;
+    btn.addEventListener('click', ()=>{
+      if (game.gold < t.cost) { beep(200,0.05,'sine',0.06); btn.classList.add('disabled'); setTimeout(()=>btn.classList.remove('disabled'),250); return; }
+      selectedTowerKey = t.key;
+      document.querySelectorAll('.shop-btn').forEach(b=>b.style.outline='none');
+      btn.style.outline = '2px solid rgba(255,255,255,0.12)';
     });
+    shopEl.appendChild(btn);
+  });
+}
+createShop();
 
-    function gameLoop() {
-        if (vidaTierra <= 0) {
-            alert("¡La Tierra ha sido destruida! Nivel alcanzado: " + nivel);
-            location.reload();
-            return;
-        }
+function svgForTower(key){
+  // simple SVG placeholder
+  const color = TOWER_TYPES.find(t=>t.key===key)?.color || '#fff';
+  return `<svg xmlns='http://www.w3.org/2000/svg' width='120' height='80'><rect rx='8' ry='8' width='100' height='60' x='10' y='10' fill='${color}' stroke='#000' stroke-opacity='0.4'/></svg>`;
+}
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height); // Limpiar pantalla
-
-        // 1. Dibujar Tierra
-        new Tierra().draw();
-
-        // 2. Generar Enemigos
-        frame++;
-        let frecuenciaSpawn = Math.max(20, 100 - (nivel * 5)); // Más rápido cada nivel
-        
-        // Jefe cada 10 niveles
-        if (frame % 2000 === 0 && nivel % 10 === 0) { // Simplificado para demo
-             enemigos.push(new Enemigo(true));
-        } else if (frame % frecuenciaSpawn === 0) {
-             enemigos.push(new Enemigo(false));
-        }
-
-        // Subir nivel cada cierto tiempo (simple)
-        if (frame % 1000 === 0) {
-            nivel++;
-            actualizarUI();
-        }
-
-        // 3. Actualizar y Dibujar Torres
-        torres.forEach(t => { t.update(); t.draw(); });
-
-        // 4. Actualizar y Dibujar Enemigos
-        enemigos.forEach((ene, index) => {
-            ene.update();
-            ene.draw();
-            if (ene.vida <= 0) {
-                oro += ene.esJefe ? 100 : 10;
-                enemigos.splice(index, 1);
-                actualizarUI();
-            }
-        });
-
-        // 5. Actualizar Proyectiles y Colisiones
-        proyectiles.forEach((p, pIndex) => {
-            p.update();
-            p.draw();
-            
-            // Eliminar si sale de pantalla
-            if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
-                proyectiles.splice(pIndex, 1);
-                return;
-            }
-
-            // Colisión con enemigos
-            enemigos.forEach(e => {
-                const dist = Math.hypot(p.x - e.x, p.y - e.y);
-                if (dist < e.radio) {
-                    e.vida -= p.daño;
-                    proyectiles.splice(pIndex, 1); // Eliminar bala
-                }
-            });
-        });
-
-        requestAnimationFrame(gameLoop);
+// ------------------------- Input / Placement -------------------------
+let mouse = {x:0,y:0,down:false};
+canvas.addEventListener('mousemove', (e)=> {
+  const rect = canvas.getBoundingClientRect();
+  mouse.x = (e.clientX - rect.left) * DPR;
+  mouse.y = (e.clientY - rect.top) * DPR;
+  showPreview();
+});
+canvas.addEventListener('click', (e)=>{
+  if (game.sellMode){
+    // Try to sell a tower under mouse
+    for (let i=game.towers.length-1;i>=0;i--){
+      if (dist(mouse.x,mouse.y, game.towers[i].x, game.towers[i].y) < 26*DPR){
+        game.gold += Math.floor(game.towers[i].sellValue);
+        game.addParticles(game.towers[i].x, game.towers[i].y, 12, '#ffcc88');
+        game.towers.splice(i,1);
+        updateUI();
+        beep(520,0.04,'sine',0.06);
+        break;
+      }
     }
+    return;
+  }
 
-    // Iniciar
-    gameLoop();
+  if (!selectedTowerKey) return;
+  const cfg = TOWER_TYPES.find(t=>t.key===selectedTowerKey);
+  if (!cfg) return;
+  if (game.gold < cfg.cost){ beep(200,0.05,'sine',0.06); return; }
+
+  // no construir sobre la Tierra
+  const c = centro();
+  if (dist(mouse.x,mouse.y,c.x,c.y) < (game.tierra.radius + 30*DPR)) {
+    // invalid
+    beep(140,0.05,'sine',0.06);
+    return;
+  }
+  // no construir encima de otra torre
+  const collision = game.towers.some(t => dist(mouse.x,mouse.y,t.x,t.y) < 36*DPR);
+  if (collision) { beep(180,0.05,'sine',0.06); return; }
+
+  // construir
+  game.gold -= cfg.cost;
+  game.towers.push(new Tower(mouse.x,mouse.y,cfg));
+  game.addParticles(mouse.x,mouse.y,8,'#d4ffb3');
+  beep(700,0.04,'sine',0.06);
+  updateUI();
+});
+
+// preview element
+const previewEl = document.getElementById('preview');
+function showPreview(){
+  previewEl.style.left = (mouse.x/DPR - 36) + 'px';
+  previewEl.style.top = (mouse.y/DPR - 36) + 'px';
+  previewEl.innerHTML = '';
+  if (selectedTowerKey){
+    previewEl.style.pointerEvents = 'none';
+    previewEl.innerHTML = `<div style="width:72px;height:72px;border-radius:8px;background:linear-gradient(180deg, #0003, #0006);border:1px solid rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;font-size:11px">${selectedTowerKey}</div>`;
+  } else previewEl.innerHTML = '';
+}
+
+// ------------------------- Persistent upgrades / missions / achievements -------------------------
+const persistent = {
+  upgrades: {
+    goldBonus: 0,
+    globalRange: 0
+  }
+};
+
+function createUpgradesUI(){
+  const el = document.getElementById('permanentUpgrades');
+  el.innerHTML = '';
+  const upgrades = [
+    {key:'goldBonus', name:'+ Oro por kill', cost:400, desc:'+10% oro'},
+    {key:'globalRange', name:'Rango global torres', cost:500, desc:'+10% rango'}
+  ];
+  upgrades.forEach(u=>{
+    const wrap = document.createElement('div');
+    wrap.style.display='flex'; wrap.style.justifyContent='space-between'; wrap.style.alignItems='center'; wrap.style.marginBottom='8px';
+    wrap.innerHTML = `<div><strong>${u.name}</strong><div style="font-size:12px;color:var(--muted)">${u.desc}</div></div>`;
+    const btn = document.createElement('button');
+    btn.innerText = u.cost + '€';
+    btn.addEventListener('click', ()=>{
+      if (game.gold >= u.cost){
+        game.gold -= u.cost;
+        persistent.upgrades[u.key] = (persistent.upgrades[u.key] || 0) + 1;
+        // aplicar efecto
+        if (u.key === 'goldBonus') game.settings.goldBonus += 0.1;
+        if (u.key === 'globalRange') for (const t of game.towers) t.range *= 1.08;
+        createUpgradesUI();
+        updateUI();
+        game.save();
+        beep(1200,0.06,'sine',0.08);
+      } else beep(220,0.05,'sine',0.06);
+    });
+    wrap.appendChild(btn);
+    el.appendChild(wrap);
+  });
+}
+createUpgradesUI();
+
+// Missions
+let missions = [
+  {id:'m1', text:'Mata 50 enemigos', goal:50, progress:0, reward:150, done:false, type:'kill'},
+  {id:'m2', text:'Sobrevive 5 oleadas', goal:5, progress:0, reward:200, done:false, type:'waves'},
+];
+function renderMissions(){
+  const mEl = document.getElementById('missions'); mEl.innerHTML = '';
+  missions.forEach(m=>{
+    const div = document.createElement('div'); div.className='mission';
+    div.innerHTML = `<div style="display:flex;justify-content:space-between"><strong>${m.text}</strong><small>${m.progress}/${m.goal}</small></div>
+                     <div style="margin-top:6px"><small>Recompensa: ${m.reward}€</small></div>`;
+    if (!m.done && m.progress >= m.goal){
+      const btn = document.createElement('button'); btn.innerText='Cobrar';
+      btn.style.marginTop='6px';
+      btn.addEventListener('click', ()=>{ game.gold += m.reward; m.done=true; updateUI(); renderMissions(); game.save(); beep(1400,0.06,'sine',0.08)});
+      div.appendChild(btn);
+    }
+    mEl.appendChild(div);
+  });
+}
+renderMissions();
+
+function checkMissions(action, data){
+  if (action === 'kill'){
+    for (const m of missions) if (!m.done && m.type === 'kill') m.progress++;
+  }
+  if (game.wave > 1){
+    for (const m of missions) if (!m.done && m.type === 'waves') m.progress = Math.max(m.progress, game.wave - 1);
+  }
+  renderMissions();
+}
+
+// Achievements
+let achievements = [
+  {id:'a1', title:'Primeros disparos', cond: (s)=> s.frame > 100, done:false, reward:50},
+  {id:'a2', title:'Sostenibilidad', cond: (s)=> s.wave >= 10, done:false, reward:300},
+];
+function checkAchievements(ev, data){
+  for (const a of achievements){
+    if (!a.done && a.cond(game)){
+      a.done = true; game.gold += a.reward; renderAchievements(); updateUI(); game.save();
+    }
+  }
+}
+function renderAchievements(){
+  const el = document.getElementById('achievements'); el.innerHTML = '';
+  achievements.forEach(a=>{
+    const d = document.createElement('div'); d.className='achievement';
+    d.innerHTML = `<div style="display:flex;justify-content:space-between"><strong>${a.title}</strong><small>${a.done ? 'Completado' : 'Pendiente'}</small></div>
+                   <div style="margin-top:6px"><small>Recompensa: ${a.reward}€</small></div>`;
+    el.appendChild(d);
+  });
+}
+renderAchievements();
+
+// ------------------------- UI / Buttons -------------------------
+document.getElementById('startBtn').addEventListener('click', ()=>{
+  game.paused = !game.paused;
+  document.getElementById('startBtn').innerText = game.paused ? 'Reanudar' : 'Pausar';
+});
+document.getElementById('sellModeBtn').addEventListener('click', ()=>{
+  game.sellMode = !game.sellMode;
+  document.getElementById('sellModeBtn').innerText = game.sellMode ? 'Salir vender' : 'Vender';
+});
+document.getElementById('saveBtn').addEventListener('click', ()=>{ game.save(); alert('Guardado'); });
+
+// UI update loop
+function updateUI(){
+  document.getElementById('goldDisplay').innerText = Math.floor(game.gold);
+  document.getElementById('levelDisplay').innerText = game.wave;
+  document.getElementById('healthDisplay').innerText = Math.round(game.tierra.health);
+  document.getElementById('xpDisplay').innerText = game.xp;
+  document.getElementById('xpToNext').innerText = game.xpToNext;
+  document.getElementById('goldBonus').innerText = persistent.upgrades.goldBonus ? `(Bon +${Math.round(persistent.upgrades.goldBonus*10)}%)` : '';
+}
+updateUI();
+
+// load save if exists
+game.load();
+updateUI();
+
+// ------------------------- Game Loop -------------------------
+let lastTime = 0;
+function loop(ts){
+  if (!lastTime) lastTime = ts;
+  const dt = Math.min(1/30, (ts-lastTime)/1000); // limitar dt
+  lastTime = ts;
+
+  game.update(dt);
+  game.draw(ctx);
+
+  // wave progression: cada X frames sube oleada
+  if (game.frame % 1200 === 0) { game.nextWave(); checkMissions('wave', null); updateUI(); }
+
+  updateUI();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// guardar auto cada 20s
+setInterval(()=>{ game.save(); console.log('Auto-guardado'); }, 20000);
+
+// ------------------------- FINAL NOTES -------------------------
+/*
+ - Código intencionalmente monolítico para que lo lleves a un repo fácilmente.
+ - Próximos pasos técnicos recomendados:
+    * Separar en módulos (game.js, entities.js, ui.js)
+    * Añadir assets (sprites) + preloader
+    * Sistema de audio más completo (samples)
+    * Balanceo de números (hp/damage/cost) con pruebas
+    * Guardado de partidas con nombre y carga de múltiples slots
+ - Si quieres que lo convierta en multi-archivo, o lo suba listo para GitHub Pages con README + issues, lo preparo.
+*/
 
 </script>
 </body>
